@@ -1,3 +1,4 @@
+import Link from "next/link";
 import Pagination from "@/components/Pagination";
 import ProjectList from "@/components/ProjectList";
 import ProjectSearch from "@/components/ProjectSearch";
@@ -27,9 +28,17 @@ export default async function ProjectsPage({
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-12">
-      <h1 className="mb-6 text-4xl font-bold text-gray-900 dark:text-white">
-        Projects Overview
-      </h1>
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-4xl font-bold text-gray-900 dark:text-white">
+          Projects Overview
+        </h1>
+        <Link
+          href="/projects/create"
+          className="inline-flex w-fit items-center rounded-md bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+        >
+          Create Project
+        </Link>
+      </div>
 
       <ProjectSearch />
 
