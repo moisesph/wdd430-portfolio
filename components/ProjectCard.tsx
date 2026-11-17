@@ -1,4 +1,7 @@
+import { deleteProject } from "@/lib/actions";
+
 interface ProjectCardProps {
+  id?: number;
   title: string;
   description: string;
   technologies: string[];
@@ -6,6 +9,7 @@ interface ProjectCardProps {
 }
 
 export default function ProjectCard({
+  id,
   title,
   description,
   technologies,
@@ -30,6 +34,17 @@ export default function ProjectCard({
             View Project
           </a>
         </p>
+      )}
+      {id !== undefined && (
+        <form action={deleteProject.bind(null, id)} className="mt-4">
+          <button
+            type="submit"
+            aria-label={`Delete ${title}, project ID ${id}`}
+            className="rounded-md border border-red-600 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-600 dark:text-red-400 dark:hover:bg-red-950"
+          >
+            Delete
+          </button>
+        </form>
       )}
     </article>
   );
