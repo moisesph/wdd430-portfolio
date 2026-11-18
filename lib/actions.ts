@@ -34,7 +34,60 @@ const ProjectFormSchema = z.object({
     .optional(),
 });
 
-export async function createProject(formData: FormData) {
+export type CreateProjectFormField =
+  | "title"
+  | "description"
+  | "type"
+  | "technologies"
+  | "link";
+
+export type CreateProjectFormState = {
+  errors: Partial<Record<CreateProjectFormField, string>>;
+  values: Record<CreateProjectFormField, string>;
+};
+
+function getProjectFormValues(
+  formData: FormData,
+): CreateProjectFormState["values"] {
+  const getStringValue = (field: CreateProjectFormField) => {
+    const value = formData.get(field);
+    return typeof value === "string" ? value : "";
+  };
+
+  return {
+    title: getStringValue("title"),
+    description: getStringValue("description"),
+    type: getStringValue("type"),
+    technologies: getStringValue("technologies"),
+    link: getStringValue("link"),
+  };
+}
+
+async function saveProject(
+  data: z.infer<typeof ProjectFormSchema>,
+): Promise<never> {
+  const { title, description, type, technologies: technologiesText, link } =
+    data;
+  const technologies = technologiesText
+    .split(",")
+    .map((technology) => technology.trim())
+    .filter(Boolean);
+  const technologyArray = `ARRAY[${technologies
+    .map((_, index) => `$${index + 4}::text`)
+    .join(", ")}]::text[]`;
+  const linkParameter = technologies.length + 4;
+
+  await sql.query(
+    `INSERT INTO projects (title, description, type, technologies, link)
+     VALUES ($1, $2, $3, ${technologyArray}, $${linkParameter})`,
+    [title, description, type, ...technologies, link || null],
+  );
+
+  revalidatePath("/projects");
+  redirect("/projects");
+}
+
+export async function createProject(formData: FormData): Promise<void> {
   const raw = {
     title: formData.get("title"),
     description: formData.get("description"),
@@ -49,9 +102,7 @@ export async function createProject(formData: FormData) {
     throw new Error(`Invalid project input: ${messages.join(" ")}`);
   }
 
-  const { title, description, type, technologies: technologiesText, link } =
-    parsed.data;
-  const technologies = technologiesText
+  const technologies = parsed.data.technologies
     .split(",")
     .map((technology) => technology.trim())
     .filter(Boolean);
@@ -60,19 +111,52 @@ export async function createProject(formData: FormData) {
     throw new Error("Provide at least one technology.");
   }
 
-  const technologyArray = `ARRAY[${technologies
-    .map((_, index) => `$${index + 4}::text`)
-    .join(", ")}]::text[]`;
-  const linkParameter = technologies.length + 4;
+  await saveProject(parsed.data);
+}
 
-  await sql.query(
-    `INSERT INTO projects (title, description, type, technologies, link)
-     VALUES ($1, $2, $3, ${technologyArray}, $${linkParameter})`,
-    [title, description, type, ...technologies, link || null],
-  );
+export async function createProjectFormAction(
+  _previousState: CreateProjectFormState,
+  formData: FormData,
+): Promise<CreateProjectFormState> {
+  const raw = {
+    title: formData.get("title"),
+    description: formData.get("description"),
+    type: formData.get("type"),
+    technologies: formData.get("technologies"),
+    link: formData.get("link") ?? undefined,
+  };
+  const parsed = ProjectFormSchema.safeParse(raw);
 
-  revalidatePath("/projects");
-  redirect("/projects");
+  if (!parsed.success) {
+    const errors: CreateProjectFormState["errors"] = {};
+    for (const issue of parsed.error.issues) {
+      const field = issue.path[0];
+      if (
+        typeof field === "string" &&
+        ["title", "description", "type", "technologies", "link"].includes(
+          field,
+        )
+      ) {
+        const key = field as CreateProjectFormField;
+        errors[key] ??= issue.message;
+      }
+    }
+    return { errors, values: getProjectFormValues(formData) };
+  }
+
+  const technologies = parsed.data.technologies
+    .split(",")
+    .map((technology) => technology.trim())
+    .filter(Boolean);
+
+  if (technologies.length === 0) {
+    return {
+      errors: { technologies: "Provide at least one technology." },
+      values: getProjectFormValues(formData),
+    };
+  }
+
+  return saveProject(parsed.data);
 }
 
 export async function updateProject(id: number, formData: FormData) {
