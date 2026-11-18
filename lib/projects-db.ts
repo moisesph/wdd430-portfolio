@@ -7,6 +7,7 @@ export interface Project {
   type: "opensource" | "school";
   technologies: string[];
   link?: string;
+  yearCompleted: number | null;
 }
 
 const ITEMS_PER_PAGE = 6;
@@ -14,7 +15,9 @@ const ITEMS_PER_PAGE = 6;
 export async function getProjects(type?: string | null): Promise<Project[]> {
   if (type) {
     const { rows } = await sql<Project>`
-      SELECT *
+      SELECT
+        id, title, description, type, technologies, link,
+        year_completed AS "yearCompleted"
       FROM projects
       WHERE type = ${type}
       ORDER BY id
@@ -24,7 +27,9 @@ export async function getProjects(type?: string | null): Promise<Project[]> {
   }
 
   const { rows } = await sql<Project>`
-    SELECT *
+    SELECT
+      id, title, description, type, technologies, link,
+      year_completed AS "yearCompleted"
     FROM projects
     ORDER BY id
   `;
@@ -34,7 +39,9 @@ export async function getProjects(type?: string | null): Promise<Project[]> {
 
 export async function getProjectById(id: number): Promise<Project | null> {
   const { rows } = await sql<Project>`
-    SELECT *
+    SELECT
+      id, title, description, type, technologies, link,
+      year_completed AS "yearCompleted"
     FROM projects
     WHERE id = ${id}
   `;
@@ -50,7 +57,9 @@ export async function fetchFilteredProjects(
   const searchTerm = `%${query}%`;
 
   const { rows } = await sql<Project>`
-    SELECT *
+    SELECT
+      id, title, description, type, technologies, link,
+      year_completed AS "yearCompleted"
     FROM projects
     WHERE
       title ILIKE ${searchTerm}

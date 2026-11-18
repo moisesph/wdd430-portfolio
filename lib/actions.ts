@@ -37,13 +37,24 @@ const ProjectFormSchema = z.object({
 export type CreateProjectFormField =
   | "title"
   | "description"
+  | "yearCompleted"
   | "type"
   | "technologies"
   | "link";
 
+export type CreateProjectFormValues = {
+  title: string;
+  description: string;
+  yearCompleted: string;
+  type: string;
+  technologies: string;
+  link: string;
+};
+
 export type CreateProjectFormState = {
-  errors: Partial<Record<CreateProjectFormField, string>>;
-  values: Record<CreateProjectFormField, string>;
+  message: string | null;
+  errors: Partial<Record<CreateProjectFormField, string[]>>;
+  values: CreateProjectFormValues;
 };
 
 function getProjectFormValues(
@@ -57,15 +68,77 @@ function getProjectFormValues(
   return {
     title: getStringValue("title"),
     description: getStringValue("description"),
+    yearCompleted: getStringValue("yearCompleted"),
     type: getStringValue("type"),
     technologies: getStringValue("technologies"),
     link: getStringValue("link"),
   };
 }
 
-async function saveProject(
+function getCreateProjectSchema() {
+  const currentYear = new Date().getFullYear();
+  const yearCompletedSchema = z.preprocess(
+    (value) => (typeof value === "string" ? value.trim() : ""),
+    z
+      .string()
+      .superRefine((value, context) => {
+        if (!value) {
+          context.addIssue({
+            code: "custom",
+            message: "Year Completed is required.",
+          });
+          return;
+        }
+
+        if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(value)) {
+          context.addIssue({
+            code: "custom",
+            message: "Enter a numeric completion year.",
+          });
+          return;
+        }
+
+        const year = Number(value);
+        if (!Number.isFinite(year)) {
+          context.addIssue({
+            code: "custom",
+            message: "Year Completed must be a finite number.",
+          });
+          return;
+        }
+
+        if (!Number.isInteger(year)) {
+          context.addIssue({
+            code: "custom",
+            message: "Year Completed must be a whole number.",
+          });
+          return;
+        }
+
+        if (year < 2000 || year > currentYear) {
+          context.addIssue({
+            code: "custom",
+            message: `Year Completed must be between 2000 and ${currentYear}.`,
+          });
+        }
+      })
+      .transform(Number),
+  );
+
+  return ProjectFormSchema.extend({
+    title: z.string().trim().min(3, "Title must be at least 3 characters."),
+    description: z
+      .string()
+      .trim()
+      .min(20, "Description must be at least 20 characters."),
+    yearCompleted: yearCompletedSchema,
+  });
+}
+
+async function insertProject(
   data: z.infer<typeof ProjectFormSchema>,
-): Promise<never> {
+  yearCompleted: number | null,
+): Promise<void> {
   const { title, description, type, technologies: technologiesText, link } =
     data;
   const technologies = technologiesText
@@ -76,15 +149,16 @@ async function saveProject(
     .map((_, index) => `$${index + 4}::text`)
     .join(", ")}]::text[]`;
   const linkParameter = technologies.length + 4;
+  const yearParameter = technologies.length + 5;
 
   await sql.query(
-    `INSERT INTO projects (title, description, type, technologies, link)
-     VALUES ($1, $2, $3, ${technologyArray}, $${linkParameter})`,
-    [title, description, type, ...technologies, link || null],
+    `INSERT INTO projects (
+       title, description, type, technologies, link, year_completed
+     ) VALUES (
+       $1, $2, $3, ${technologyArray}, $${linkParameter}, $${yearParameter}
+     )`,
+    [title, description, type, ...technologies, link || null, yearCompleted],
   );
-
-  revalidatePath("/projects");
-  redirect("/projects");
 }
 
 export async function createProject(formData: FormData): Promise<void> {
@@ -111,7 +185,14 @@ export async function createProject(formData: FormData): Promise<void> {
     throw new Error("Provide at least one technology.");
   }
 
-  await saveProject(parsed.data);
+  try {
+    await insertProject(parsed.data, null);
+  } catch {
+    throw new Error("The project could not be saved. Please try again.");
+  }
+
+  revalidatePath("/projects");
+  redirect("/projects");
 }
 
 export async function createProjectFormAction(
@@ -124,8 +205,9 @@ export async function createProjectFormAction(
     type: formData.get("type"),
     technologies: formData.get("technologies"),
     link: formData.get("link") ?? undefined,
+    yearCompleted: formData.get("yearCompleted"),
   };
-  const parsed = ProjectFormSchema.safeParse(raw);
+  const parsed = getCreateProjectSchema().safeParse(raw);
 
   if (!parsed.success) {
     const errors: CreateProjectFormState["errors"] = {};
@@ -133,15 +215,24 @@ export async function createProjectFormAction(
       const field = issue.path[0];
       if (
         typeof field === "string" &&
-        ["title", "description", "type", "technologies", "link"].includes(
-          field,
-        )
+        [
+          "title",
+          "description",
+          "yearCompleted",
+          "type",
+          "technologies",
+          "link",
+        ].includes(field)
       ) {
         const key = field as CreateProjectFormField;
-        errors[key] ??= issue.message;
+        (errors[key] ??= []).push(issue.message);
       }
     }
-    return { errors, values: getProjectFormValues(formData) };
+    return {
+      message: "Please correct the highlighted fields and submit again.",
+      errors,
+      values: getProjectFormValues(formData),
+    };
   }
 
   const technologies = parsed.data.technologies
@@ -151,12 +242,24 @@ export async function createProjectFormAction(
 
   if (technologies.length === 0) {
     return {
-      errors: { technologies: "Provide at least one technology." },
+      message: "Provide at least one technology and submit again.",
+      errors: { technologies: ["Provide at least one technology."] },
       values: getProjectFormValues(formData),
     };
   }
 
-  return saveProject(parsed.data);
+  try {
+    await insertProject(parsed.data, parsed.data.yearCompleted);
+  } catch {
+    return {
+      message: "The project could not be saved. Please try again.",
+      errors: {},
+      values: getProjectFormValues(formData),
+    };
+  }
+
+  revalidatePath("/projects");
+  redirect("/projects");
 }
 
 export async function updateProject(id: number, formData: FormData) {

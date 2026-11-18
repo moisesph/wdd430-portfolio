@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import {
   createProjectFormAction,
   type CreateProjectFormField,
@@ -12,22 +12,16 @@ const fieldClassName =
   "mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600 dark:border-gray-600 dark:bg-gray-800 dark:text-white";
 
 const initialState: CreateProjectFormState = {
+  message: null,
   errors: {},
   values: {
     title: "",
     description: "",
+    yearCompleted: "",
     type: "",
     technologies: "",
     link: "",
   },
-};
-
-const fieldLabels: Record<CreateProjectFormField, string> = {
-  title: "Title",
-  description: "Description",
-  type: "Type",
-  technologies: "Technologies",
-  link: "Project URL",
 };
 
 function getDescribedBy(helpId?: string, errorId?: string) {
@@ -39,19 +33,20 @@ export default function CreateProjectForm() {
     createProjectFormAction,
     initialState,
   );
+  const yearCompletedInputRef = useRef<HTMLInputElement>(null);
   const [editedValues, setEditedValues] = useState<
     CreateProjectFormState["values"] | null
   >(null);
+  useEffect(() => {
+    if (yearCompletedInputRef.current) {
+      yearCompletedInputRef.current.max = String(new Date().getFullYear());
+    }
+  }, []);
   const visibleErrors = state.errors;
   const values = editedValues ?? state.values;
-  const errorFields = Object.keys(visibleErrors) as CreateProjectFormField[];
   const announcement = isPending
     ? "Submitting project for validation."
-    : errorFields.length
-      ? `The submitted project has validation errors in: ${errorFields
-        .map((field) => fieldLabels[field])
-        .join(", ")}. Please correct them and submit again.`
-      : "";
+    : state.message ?? "";
 
   function updateField(field: CreateProjectFormField, value: string) {
     setEditedValues((current) => ({ ...(current ?? values), [field]: value }));
@@ -89,25 +84,24 @@ export default function CreateProjectForm() {
           name="title"
           type="text"
           required
-          minLength={2}
+          minLength={3}
           readOnly={isPending}
           value={values.title}
-          aria-describedby={getDescribedBy(
-            undefined,
-            visibleErrors.title ? "title-error" : undefined,
-          )}
-          aria-invalid={visibleErrors.title ? true : undefined}
+          aria-describedby={getDescribedBy(undefined, "title-error")}
+          aria-invalid={visibleErrors.title?.length ? true : undefined}
           onChange={(event) => updateField("title", event.currentTarget.value)}
           className={fieldClassName}
         />
-        {visibleErrors.title && (
-          <p
-            id="title-error"
-            className="mt-1 text-sm text-red-700 dark:text-red-400"
-          >
-            {visibleErrors.title}
-          </p>
-        )}
+        <div id="title-error" aria-live="polite" aria-atomic="true">
+          {visibleErrors.title?.map((error, index) => (
+            <p
+              key={`title-${index}`}
+              className="mt-1 text-sm text-red-700 dark:text-red-400"
+            >
+              {error}
+            </p>
+          ))}
+        </div>
       </div>
 
       <div>
@@ -121,28 +115,27 @@ export default function CreateProjectForm() {
           id="description"
           name="description"
           required
-          minLength={10}
+          minLength={20}
           rows={5}
           readOnly={isPending}
           value={values.description}
-          aria-describedby={getDescribedBy(
-            undefined,
-            visibleErrors.description ? "description-error" : undefined,
-          )}
-          aria-invalid={visibleErrors.description ? true : undefined}
+          aria-describedby={getDescribedBy(undefined, "description-error")}
+          aria-invalid={visibleErrors.description?.length ? true : undefined}
           onChange={(event) =>
             updateField("description", event.currentTarget.value)
           }
           className={fieldClassName}
         />
-        {visibleErrors.description && (
-          <p
-            id="description-error"
-            className="mt-1 text-sm text-red-700 dark:text-red-400"
-          >
-            {visibleErrors.description}
-          </p>
-        )}
+        <div id="description-error" aria-live="polite" aria-atomic="true">
+          {visibleErrors.description?.map((error, index) => (
+            <p
+              key={`description-${index}`}
+              className="mt-1 text-sm text-red-700 dark:text-red-400"
+            >
+              {error}
+            </p>
+          ))}
+        </div>
       </div>
 
       <div>
@@ -158,11 +151,8 @@ export default function CreateProjectForm() {
           required
           disabled={isPending}
           value={values.type}
-          aria-describedby={getDescribedBy(
-            undefined,
-            visibleErrors.type ? "type-error" : undefined,
-          )}
-          aria-invalid={visibleErrors.type ? true : undefined}
+          aria-describedby={getDescribedBy(undefined, "type-error")}
+          aria-invalid={visibleErrors.type?.length ? true : undefined}
           onChange={(event) => updateField("type", event.currentTarget.value)}
           className={fieldClassName}
         >
@@ -172,14 +162,56 @@ export default function CreateProjectForm() {
           <option value="opensource">Open Source</option>
           <option value="school">School</option>
         </select>
-        {visibleErrors.type && (
-          <p
-            id="type-error"
-            className="mt-1 text-sm text-red-700 dark:text-red-400"
-          >
-            {visibleErrors.type}
-          </p>
-        )}
+        <div id="type-error" aria-live="polite" aria-atomic="true">
+          {visibleErrors.type?.map((error, index) => (
+            <p
+              key={`type-${index}`}
+              className="mt-1 text-sm text-red-700 dark:text-red-400"
+            >
+              {error}
+            </p>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <label
+          htmlFor="yearCompleted"
+          className="block font-medium text-gray-900 dark:text-white"
+        >
+          Year Completed
+        </label>
+        <input
+          ref={yearCompletedInputRef}
+          id="yearCompleted"
+          name="yearCompleted"
+          type="number"
+          required
+          min={2000}
+          step="1"
+          disabled={isPending}
+          value={values.yearCompleted}
+          aria-describedby={getDescribedBy(undefined, "yearCompleted-error")}
+          aria-invalid={visibleErrors.yearCompleted?.length ? true : undefined}
+          onChange={(event) =>
+            updateField("yearCompleted", event.currentTarget.value)
+          }
+          className={fieldClassName}
+        />
+        <div
+          id="yearCompleted-error"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {visibleErrors.yearCompleted?.map((error, index) => (
+            <p
+              key={`yearCompleted-${index}`}
+              className="mt-1 text-sm text-red-700 dark:text-red-400"
+            >
+              {error}
+            </p>
+          ))}
+        </div>
       </div>
 
       <div>
@@ -199,9 +231,9 @@ export default function CreateProjectForm() {
           value={values.technologies}
           aria-describedby={getDescribedBy(
             "technologies-help",
-            visibleErrors.technologies ? "technologies-error" : undefined,
+            "technologies-error",
           )}
-          aria-invalid={visibleErrors.technologies ? true : undefined}
+          aria-invalid={visibleErrors.technologies?.length ? true : undefined}
           onChange={(event) =>
             updateField("technologies", event.currentTarget.value)
           }
@@ -213,14 +245,20 @@ export default function CreateProjectForm() {
         >
           Separate technologies with commas.
         </p>
-        {visibleErrors.technologies && (
-          <p
-            id="technologies-error"
-            className="mt-1 text-sm text-red-700 dark:text-red-400"
-          >
-            {visibleErrors.technologies}
-          </p>
-        )}
+        <div
+          id="technologies-error"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {visibleErrors.technologies?.map((error, index) => (
+            <p
+              key={`technologies-${index}`}
+              className="mt-1 text-sm text-red-700 dark:text-red-400"
+            >
+              {error}
+            </p>
+          ))}
+        </div>
       </div>
 
       <div>
@@ -236,22 +274,21 @@ export default function CreateProjectForm() {
           type="url"
           readOnly={isPending}
           value={values.link}
-          aria-describedby={getDescribedBy(
-            undefined,
-            visibleErrors.link ? "link-error" : undefined,
-          )}
-          aria-invalid={visibleErrors.link ? true : undefined}
+          aria-describedby={getDescribedBy(undefined, "link-error")}
+          aria-invalid={visibleErrors.link?.length ? true : undefined}
           onChange={(event) => updateField("link", event.currentTarget.value)}
           className={fieldClassName}
         />
-        {visibleErrors.link && (
-          <p
-            id="link-error"
-            className="mt-1 text-sm text-red-700 dark:text-red-400"
-          >
-            {visibleErrors.link}
-          </p>
-        )}
+        <div id="link-error" aria-live="polite" aria-atomic="true">
+          {visibleErrors.link?.map((error, index) => (
+            <p
+              key={`link-${index}`}
+              className="mt-1 text-sm text-red-700 dark:text-red-400"
+            >
+              {error}
+            </p>
+          ))}
+        </div>
       </div>
 
       <div className="flex items-center gap-4">
